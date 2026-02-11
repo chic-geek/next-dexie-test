@@ -5,3 +5,5 @@ export type Person = {
   age: number;
   createdAt: number; // timestamp so we can sort by newest
 };
+
+export type NewPerson = Omit<Person, "id" | "createdAt">;
