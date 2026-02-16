@@ -1,9 +1,12 @@
 "use client";
 
-import { usePeopleQuery } from "../../services";
+import { Button } from "@/components/ui/button";
+import { useDeletePersonMutation, usePeopleQuery } from "../../services";
+import { TrashIcon } from "lucide-react";
 
 export function PeopleList() {
   const people = usePeopleQuery();
+  const deletePerson = useDeletePersonMutation();
 
   return (
     <section className="rounded-lg border p-4 space-y-3">
@@ -27,6 +30,14 @@ export function PeopleList() {
               </div>
               <div className="text-sm text-muted-foreground">Age: {p.age}</div>
             </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Delete person"
+              onClick={() => deletePerson.mutate(p.id!)}
+            >
+              <TrashIcon size="16" color="red" />
+            </Button>
           </li>
         ))}
       </ul>

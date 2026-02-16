@@ -11,3 +11,7 @@ export async function addPerson(input: NewPerson) {
 export async function listPeopleNewestFirst() {
   return db.people.orderBy("createdAt").reverse().toArray();
 }
+
+export async function deletePerson(id: number) {
+  return db.people.delete(id);
+}

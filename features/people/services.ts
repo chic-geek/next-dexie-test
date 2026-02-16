@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { peopleKeys } from "./query-keys";
-import { addPerson, listPeopleNewestFirst } from "./storage";
+import { addPerson, deletePerson, listPeopleNewestFirst } from "./storage";
 
 export function usePeopleQuery() {
   return useQuery({
@@ -15,6 +15,14 @@ export function useAddPersonMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: addPerson,
+    onSuccess: () => qc.invalidateQueries({ queryKey: peopleKeys.all }),
+  });
+}
+
+export function useDeletePersonMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: deletePerson,
     onSuccess: () => qc.invalidateQueries({ queryKey: peopleKeys.all }),
   });
 }
