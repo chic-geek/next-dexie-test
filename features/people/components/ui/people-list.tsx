@@ -1,8 +1,8 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
 import { useDeletePersonMutation, usePeopleQuery } from "../../services";
 import { TrashIcon } from "lucide-react";
+import { AlertButton } from "./alert-button";
 
 export function PeopleList() {
   const people = usePeopleQuery();
@@ -30,14 +30,14 @@ export function PeopleList() {
               </div>
               <div className="text-sm text-muted-foreground">Age: {p.age}</div>
             </div>
-            <Button
+            <AlertButton
               variant="ghost"
               size="icon"
               aria-label="Delete person"
-              onClick={() => deletePerson.mutate(p.id!)}
+              onConfirm={() => deletePerson.mutate(p.id!)}
             >
               <TrashIcon size="16" color="red" />
-            </Button>
+            </AlertButton>
           </li>
         ))}
       </ul>
