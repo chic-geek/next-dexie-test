@@ -11,3 +11,7 @@ export async function addPet(input: NewPet) {
 export async function listPetsNewestFirst() {
   return db.pets.orderBy("createdAt").reverse().toArray();
 }
+
+export async function deletePet(id: number) {
+  return db.pets.delete(id);
+}
