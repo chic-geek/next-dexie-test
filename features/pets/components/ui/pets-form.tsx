@@ -14,11 +14,30 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type FormValues = {
   name: string;
   species: "dog" | "cat" | "other";
-  ownerPersonId?: number; // NEW
+  ownerPersonId?: number;
+};
+
+const speciesOptions = [
+  { value: "dog", label: "Dog" },
+  { value: "cat", label: "Cat" },
+  { value: "other", label: "Other" },
+];
+
+const defaultFormValues = {
+  name: "",
+  species: undefined,
+  ownerPersonId: undefined,
 };
 
 export function PetsForm() {
@@ -26,7 +45,7 @@ export function PetsForm() {
   const people = usePeopleQuery();
 
   const form = useForm<FormValues>({
-    defaultValues: { name: "", species: "dog", ownerPersonId: undefined },
+    defaultValues: defaultFormValues,
   });
 
   const onSubmit = form.handleSubmit(async (values) => {
@@ -36,7 +55,7 @@ export function PetsForm() {
       ownerPersonId: values.ownerPersonId,
     });
 
-    form.reset({ name: "", species: "dog", ownerPersonId: undefined });
+    form.reset(defaultFormValues);
   });
 
   return (
@@ -67,55 +86,56 @@ export function PetsForm() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Species</FormLabel>
-                <FormControl>
-                  <select
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                    value={field.value}
-                    onChange={(e) =>
-                      field.onChange(e.target.value as FormValues["species"])
-                    }
-                  >
-                    <option value="dog">Dog</option>
-                    <option value="cat">Cat</option>
-                    <option value="other">Other</option>
-                  </select>
-                </FormControl>
+                <Select
+                  key={field.value ?? "empty"}
+                  value={field.value}
+                  onValueChange={field.onChange}
+                >
+                  <FormControl>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {speciesOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}
           />
 
-          {/* NEW: Owner select */}
           <FormField
             control={form.control}
             name="ownerPersonId"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Owner (optional)</FormLabel>
-                <FormControl>
-                  <select
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                    value={field.value ?? ""}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      field.onChange(v === "" ? undefined : Number(v));
-                    }}
-                    disabled={people.isLoading || people.isError}
-                  >
-                    <option value="">No owner</option>
-                    {people.data?.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.firstName} {p.lastName}
-                      </option>
+                <Select
+                  key={field.value ?? "empty"}
+                  value={String(field.value ?? "")}
+                  onValueChange={(v) => {
+                    field.onChange(v === "" ? undefined : Number(v));
+                  }}
+                  disabled={people.isLoading || people.isError}
+                >
+                  <FormControl>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {people.data?.map((option) => (
+                      <SelectItem key={option.id} value={String(option.id)}>
+                        {option.firstName} {option.lastName}
+                      </SelectItem>
                     ))}
-                  </select>
-                </FormControl>
-                {/* Optional: show a hint if people failed to load */}
-                {people.isError ? (
-                  <p className="text-sm text-destructive">
-                    Could not load people.
-                  </p>
-                ) : null}
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}
