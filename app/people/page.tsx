@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
-import { PeopleForm } from "@/features/people/components/ui/people-form";
 import { PeopleList } from "@/features/people/components/ui/people-list";
+import { PeopleCreateForm } from "@/features/people/components/ui/people-create-form";
 
 export default function PeoplePage() {
   return (
@@ -20,7 +20,7 @@ export default function PeoplePage() {
         </Link>
       </header>
 
-      <PeopleForm />
+      <PeopleCreateForm />
       <PeopleList />
     </main>
   );

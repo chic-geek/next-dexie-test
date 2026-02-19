@@ -15,3 +15,7 @@ export async function listPetsNewestFirst() {
 export async function deletePet(id: number) {
   return db.pets.delete(id);
 }
+
+export async function updatePet(id: number, input: Partial<NewPet>) {
+  return db.pets.update(id, input);
+}

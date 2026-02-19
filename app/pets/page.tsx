@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
-import { PetsForm } from "@/features/pets/components/ui/pets-form";
+import { PetsCreateForm } from "@/features/pets/components/ui/pets-create-form";
 import { PetsList } from "@/features/pets/components/ui/pets-list";
 
 export default function PetsPage() {
@@ -20,7 +20,7 @@ export default function PetsPage() {
         </Link>
       </header>
 
-      <PetsForm />
+      <PetsCreateForm />
       <PetsList />
     </main>
   );

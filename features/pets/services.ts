@@ -2,8 +2,9 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { petsKeys } from "./query-keys";
-import { addPet, deletePet, listPetsNewestFirst } from "./storage";
+import { addPet, deletePet, listPetsNewestFirst, updatePet } from "./storage";
 import { toast } from "sonner";
+import { NewPet } from "./types";
 
 export function usePetsQuery() {
   return useQuery({
@@ -33,6 +34,27 @@ export function useDeletePetMutation() {
     },
     onError: () => {
       toast.error("Failed to delete pet.");
+    },
+  });
+}
+
+export function useUpdatePetMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      updates,
+    }: {
+      id: number;
+      updates: Partial<NewPet>;
+      name?: string;
+    }) => updatePet(id, updates),
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: petsKeys.all });
+      toast.success(`Updated ${variables.name}'s details.`);
+    },
+    onError: (_, variables) => {
+      toast.error(`Failed to update ${variables?.name}'s details.`);
     },
   });
 }

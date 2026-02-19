@@ -4,7 +4,9 @@ import * as React from "react";
 import { useDeletePetMutation, usePetsQuery } from "../../services";
 import { usePeopleQuery } from "@/features/people/services";
 import { AlertButton } from "@/features/people/components/ui/alert-button";
-import { TrashIcon } from "lucide-react";
+import { EditIcon, TrashIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export function PetsList() {
   const pets = usePetsQuery();
@@ -54,14 +56,26 @@ export function PetsList() {
                 </div>
 
                 <div className="text-right flex flex-col justify-between items-end gap-1">
-                  <AlertButton
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Delete person"
-                    onConfirm={() => deletePet.mutate(p.id!)}
-                  >
-                    <TrashIcon size="16" color="red" />
-                  </AlertButton>
+                  <div>
+                    <Button
+                      asChild
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`Edit ${p.name}'s details`}
+                    >
+                      <Link href={`/pets/${p.id}/edit`}>
+                        <EditIcon className="size-4" />
+                      </Link>
+                    </Button>
+                    <AlertButton
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Delete ${p.name}`}
+                      onConfirm={() => deletePet.mutate(p.id!)}
+                    >
+                      <TrashIcon size="16" color="red" />
+                    </AlertButton>
+                  </div>
                   <div className="text-xs text-muted-foreground">
                     {new Date(p.createdAt).toLocaleString()}
                   </div>

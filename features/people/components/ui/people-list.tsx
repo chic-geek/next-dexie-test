@@ -1,8 +1,10 @@
 "use client";
 
 import { useDeletePersonMutation, usePeopleQuery } from "../../services";
-import { TrashIcon } from "lucide-react";
+import { EditIcon, TrashIcon } from "lucide-react";
 import { AlertButton } from "./alert-button";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export function PeopleList() {
   const people = usePeopleQuery();
@@ -30,14 +32,26 @@ export function PeopleList() {
               </div>
               <div className="text-sm text-muted-foreground">Age: {p.age}</div>
             </div>
-            <AlertButton
-              variant="ghost"
-              size="icon"
-              aria-label="Delete person"
-              onConfirm={() => deletePerson.mutate(p.id!)}
-            >
-              <TrashIcon size="16" color="red" />
-            </AlertButton>
+            <div className="">
+              <Button
+                asChild
+                size="icon"
+                variant="ghost"
+                aria-label={`Edit ${p.firstName} ${p.lastName}`}
+              >
+                <Link href={`/people/${p.id}/edit`}>
+                  <EditIcon className="size-4" />
+                </Link>
+              </Button>
+              <AlertButton
+                variant="ghost"
+                size="icon"
+                aria-label="Delete person"
+                onConfirm={() => deletePerson.mutate(p.id!)}
+              >
+                <TrashIcon size="16" color="red" />
+              </AlertButton>
+            </div>
           </li>
         ))}
       </ul>

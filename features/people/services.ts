@@ -4,7 +4,13 @@ import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { peopleKeys } from "./query-keys";
-import { addPerson, deletePerson, listPeopleNewestFirst } from "./storage";
+import {
+  addPerson,
+  deletePerson,
+  listPeopleNewestFirst,
+  updatePerson,
+} from "./storage";
+import { NewPerson } from "./types";
 
 export function usePeopleQuery() {
   return useQuery({
@@ -37,6 +43,28 @@ export function useDeletePersonMutation() {
     },
     onError: () => {
       toast.error("Failed to delete person.");
+    },
+  });
+}
+
+export function useUpdatePersonMutation() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      updates,
+    }: {
+      id: number;
+      updates: Partial<NewPerson>;
+      fullname?: string;
+    }) => updatePerson(id, updates),
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: peopleKeys.all });
+      toast.success(`Updated ${variables.fullname}'s details.`);
+    },
+    onError: (_, variables) => {
+      toast.error(`Failed to update ${variables?.fullname}'s details.`);
     },
   });
 }

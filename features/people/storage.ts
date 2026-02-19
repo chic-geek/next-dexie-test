@@ -15,3 +15,7 @@ export async function listPeopleNewestFirst() {
 export async function deletePerson(id: number) {
   return db.people.delete(id);
 }
+
+export async function updatePerson(id: number, updates: Partial<NewPerson>) {
+  return db.people.update(id, updates);
+}
