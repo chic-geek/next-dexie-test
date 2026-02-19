@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, PawPrint } from "lucide-react";
 
 import { PetsCreateForm } from "@/features/pets/components/ui/pets-create-form";
 import { PetsList } from "@/features/pets/components/ui/pets-list";
@@ -9,7 +9,10 @@ export default function PetsPage() {
     <main className="mx-auto max-w-xl p-6 space-y-8">
       <header className="flex items-top justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold">Pets</h1>
+          <h1 className="text-2xl font-semibold flex items-center gap-1.5">
+            <PawPrint size={24} />
+            <span>Pets</span>
+          </h1>
           <p className="text-sm text-muted-foreground">
             Second feature/table using the same Dexie + TanStack Query patterns.
           </p>

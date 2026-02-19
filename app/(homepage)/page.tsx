@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
+import { PawPrint, UsersRound } from "lucide-react";
 
 export default function HomePage() {
   return (
@@ -15,7 +16,10 @@ export default function HomePage() {
         <Link href="/people">
           <Card className="hover:bg-muted transition-colors cursor-pointer">
             <CardContent>
-              <h2 className="font-medium">People</h2>
+              <h2 className="font-medium flex items-center gap-1">
+                <UsersRound size={20} />
+                <span>People</span>
+              </h2>
               <p className="text-sm text-muted-foreground">
                 Create and manage people.
               </p>
@@ -26,7 +30,10 @@ export default function HomePage() {
         <Link href="/pets">
           <Card className="hover:bg-muted transition-colors cursor-pointer">
             <CardContent>
-              <h2 className="font-medium">Pets</h2>
+              <h2 className="font-medium flex items-center gap-1">
+                <PawPrint size={20} />
+                <span>Pets</span>
+              </h2>
               <p className="text-sm text-muted-foreground">
                 Create pets and associate them with people.
               </p>
