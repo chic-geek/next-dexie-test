@@ -1,6 +1,7 @@
 "use client";
 
 import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { usePeopleQuery } from "@/features/people/services";
 
 import { Button } from "@/components/ui/button";
@@ -20,12 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-type FormValues = {
-  name: string;
-  species: "dog" | "cat" | "other";
-  ownerPersonId?: number;
-};
+import { petsFormSchema, PetsFormValues } from "../../schemas";
 
 const speciesOptions = [
   { value: "dog", label: "Dog" },
@@ -33,16 +29,16 @@ const speciesOptions = [
   { value: "other", label: "Other" },
 ];
 
-const emptyDefaults: FormValues = {
+const emptyDefaults = {
   name: "",
-  species: undefined as unknown as "dog" | "cat" | "other",
+  species: undefined,
   ownerPersonId: undefined,
 };
 
 type PetsFormProps = {
   isPending: boolean;
-  defaultValues?: FormValues;
-  onSubmit: (values: FormValues) => Promise<void>;
+  defaultValues?: PetsFormValues;
+  onSubmit: (values: PetsFormValues) => Promise<void>;
   showReset?: boolean;
 };
 
@@ -54,16 +50,13 @@ export function PetsForm({
 }: PetsFormProps) {
   const people = usePeopleQuery();
 
-  const form = useForm<FormValues>({
+  const form = useForm({
+    resolver: zodResolver(petsFormSchema),
     defaultValues: defaultValues ?? emptyDefaults,
   });
 
   const onSubmit = form.handleSubmit(async (values) => {
-    await onSubmitProp({
-      name: values.name.trim(),
-      species: values.species,
-      ownerPersonId: values.ownerPersonId,
-    });
+    await onSubmitProp(values);
   });
 
   return (
@@ -72,7 +65,6 @@ export function PetsForm({
         <FormField
           control={form.control}
           name="name"
-          rules={{ required: "Name is required" }}
           render={({ field }) => (
             <FormItem>
               <FormLabel>Pet name</FormLabel>
@@ -87,7 +79,6 @@ export function PetsForm({
         <FormField
           control={form.control}
           name="species"
-          rules={{ required: "Species is required" }}
           render={({ field }) => (
             <FormItem>
               <FormLabel>Species</FormLabel>

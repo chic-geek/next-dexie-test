@@ -1,6 +1,7 @@
 "use client";
 
 import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -11,15 +12,14 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { peopleFormSchema, PeopleFormValues } from "../../schemas";
 
-type FormValues = { firstName: string; lastName: string; age: number };
-
-const emptyDefaults: FormValues = { firstName: "", lastName: "", age: 0 };
+const emptyDefaults: PeopleFormValues = { firstName: "", lastName: "", age: 0 };
 
 type PeopleFormProps = {
   isPending: boolean;
-  defaultValues?: FormValues;
-  onSubmit: (values: FormValues) => Promise<void>;
+  defaultValues?: PeopleFormValues;
+  onSubmit: (values: PeopleFormValues) => Promise<void>;
   showReset?: boolean;
 };
 
@@ -29,16 +29,13 @@ export function PeopleForm({
   onSubmit: onSubmitProp,
   showReset,
 }: PeopleFormProps) {
-  const form = useForm<FormValues>({
+  const form = useForm({
+    resolver: zodResolver(peopleFormSchema),
     defaultValues: defaultValues ?? emptyDefaults,
   });
 
   const onSubmit = form.handleSubmit(async (values) => {
-    await onSubmitProp({
-      firstName: values.firstName.trim(),
-      lastName: values.lastName.trim(),
-      age: Number(values.age),
-    });
+    await onSubmitProp(values);
   });
 
   return (
@@ -47,7 +44,6 @@ export function PeopleForm({
         <FormField
           control={form.control}
           name="firstName"
-          rules={{ required: "First name is required" }}
           render={({ field }) => (
             <FormItem>
               <FormLabel>First name</FormLabel>
@@ -61,7 +57,6 @@ export function PeopleForm({
         <FormField
           control={form.control}
           name="lastName"
-          rules={{ required: "Last name is required" }}
           render={({ field }) => (
             <FormItem>
               <FormLabel>Last name</FormLabel>
@@ -75,19 +70,11 @@ export function PeopleForm({
         <FormField
           control={form.control}
           name="age"
-          rules={{
-            required: "Age is required",
-            min: { value: 0, message: "Age must be >= 0" },
-          }}
           render={({ field }) => (
             <FormItem>
               <FormLabel>Age</FormLabel>
               <FormControl>
-                <Input
-                  type="number"
-                  {...field}
-                  onChange={(e) => field.onChange(Number(e.target.value))}
-                />
+                <Input type="number" {...field} value={field.value as number} />
               </FormControl>
               <FormMessage />
             </FormItem>
