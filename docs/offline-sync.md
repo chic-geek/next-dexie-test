@@ -159,7 +159,7 @@ When a user logs in, their server data is pulled into Dexie so reads work immedi
 
 ```typescript
 export async function hydrateFromServer(): Promise<void> {
-  // Only run once per browser session — sessionStorage is cleared on tab close
+  // Only run once per tab — sessionStorage (not the auth session) is cleared on tab close
   if (sessionStorage.getItem("hydratedAt")) return;
 
   const [peopleRes, petsRes] = await Promise.all([
@@ -168,14 +168,18 @@ export async function hydrateFromServer(): Promise<void> {
   ]);
   if (!peopleRes.ok || !petsRes.ok) return;
 
-  // Local records with pending changes win — don't overwrite them
-  const pendingIds = new Set(
-    (await db.people.filter((p) => p.pendingSync).primaryKeys()) as string[]
-  );
+  // Load local records into a map for O(1) updatedAt comparison
+  const localPeople = await db.people.toArray();
+  const localPeopleMap = new Map(localPeople.map((p) => [p.id, p]));
 
   await db.people.bulkPut(
     serverPeople
-      .filter((p) => !pendingIds.has(p.id))
+      .filter((p) => {
+        const local = localPeopleMap.get(p.id);
+        if (local?.pendingSync) return false; // local edits always win
+        if (!local) return true;              // missing locally — pull it in
+        return new Date(p.updatedAt).getTime() > local.updatedAt; // server is newer
+      })
       .map(serverPersonToDexie)
   );
 
@@ -183,7 +187,13 @@ export async function hydrateFromServer(): Promise<void> {
 }
 ```
 
-**Conflict resolution:** local wins for `pendingSync: true` records (offline edits take precedence over stale server data). For all other records, server wins (last-write-wins with `updatedAt`).
+**Conflict resolution:** Dexie is the source of truth. For each server record, hydration applies a three-way check:
+
+1. **`pendingSync: true` locally** — skip. Local edits always win, regardless of timestamps.
+2. **Record missing locally** — pull it in. Covers a new device or a cleared IndexedDB.
+3. **`updatedAt` comparison** — only overwrite if the server version is strictly newer than the local one.
+
+This means local changes are never overwritten by stale server data, even when the `sessionStorage` guard clears (i.e. the tab is closed and reopened).
 
 ---
 

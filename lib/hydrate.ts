@@ -68,23 +68,36 @@ export async function hydrateFromServer(): Promise<void> {
   const [serverPeople, serverPets]: [ServerPerson[], ServerPet[]] =
     await Promise.all([peopleRes.json(), petsRes.json()]);
 
-  // Skip records that have unsync'd local edits
-  const pendingPeople = await db.people
-    .filter((p) => p.pendingSync)
-    .primaryKeys();
-  const pendingPets = await db.pets.filter((p) => p.pendingSync).primaryKeys();
-  const pendingPeopleIds = new Set(pendingPeople as string[]);
-  const pendingPetsIds = new Set(pendingPets as string[]);
+  // Load all local records into maps for O(1) updatedAt comparison
+  const [localPeople, localPets] = await Promise.all([
+    db.people.toArray(),
+    db.pets.toArray(),
+  ]);
+  const localPeopleMap = new Map(localPeople.map((p) => [p.id, p]));
+  const localPetsMap = new Map(localPets.map((p) => [p.id, p]));
 
   await db.people.bulkPut(
     serverPeople
-      .filter((p) => !pendingPeopleIds.has(p.id))
+      .filter((p) => {
+        const local = localPeopleMap.get(p.id);
+        // Local edits always win — never overwrite pending changes
+        if (local?.pendingSync) return false;
+        // Record missing locally — pull it in
+        if (!local) return true;
+        // Server record is newer — take it; otherwise keep local version
+        return new Date(p.updatedAt).getTime() > local.updatedAt;
+      })
       .map(serverPersonToDexie)
   );
 
   await db.pets.bulkPut(
     serverPets
-      .filter((p) => !pendingPetsIds.has(p.id))
+      .filter((p) => {
+        const local = localPetsMap.get(p.id);
+        if (local?.pendingSync) return false;
+        if (!local) return true;
+        return new Date(p.updatedAt).getTime() > local.updatedAt;
+      })
       .map(serverPetToDexie)
   );
 
