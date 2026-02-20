@@ -50,11 +50,11 @@ export async function addPet(input: NewPet): Promise<Pet> {
   return pet;
 }
 
-export async function listPetsNewestFirst(): Promise<Pet[]> {
+export async function listPetsNewestFirst(userId: string): Promise<Pet[]> {
   return db.pets
     .orderBy("createdAt")
     .reverse()
-    .filter((p) => !p.pendingDelete)
+    .filter((p) => p.userId === userId && !p.pendingDelete)
     .toArray();
 }
 

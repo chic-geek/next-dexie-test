@@ -3,6 +3,7 @@
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useSession } from "@/lib/auth-client";
 import { peopleKeys } from "./query-keys";
 import {
   addPerson,
@@ -13,9 +14,12 @@ import {
 import { NewPerson } from "./types";
 
 export function usePeopleQuery() {
+  const { data: session } = useSession();
+  const userId = session?.user.id;
   return useQuery({
     queryKey: peopleKeys.all,
-    queryFn: listPeopleNewestFirst,
+    queryFn: () => listPeopleNewestFirst(userId!),
+    enabled: !!userId,
   });
 }
 

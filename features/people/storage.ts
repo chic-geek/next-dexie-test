@@ -49,11 +49,11 @@ export async function addPerson(input: NewPerson): Promise<Person> {
   return person;
 }
 
-export async function listPeopleNewestFirst(): Promise<Person[]> {
+export async function listPeopleNewestFirst(userId: string): Promise<Person[]> {
   return db.people
     .orderBy("createdAt")
     .reverse()
-    .filter((p) => !p.pendingDelete)
+    .filter((p) => p.userId === userId && !p.pendingDelete)
     .toArray();
 }
 
