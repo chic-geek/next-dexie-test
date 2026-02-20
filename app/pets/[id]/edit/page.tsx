@@ -23,7 +23,7 @@ export default async function EditPetPage({ params }: EditPetPageProps) {
         </Link>
       </header>
 
-      <PetsEditForm petId={Number(id)} />
+      <PetsEditForm petId={id} />
     </main>
   );
 }

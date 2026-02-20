@@ -1,21 +1,77 @@
-import { db } from "@/db";
-import type { NewPet } from "./types";
+import { db } from "@/db/dexie";
+import type { NewPet, Pet } from "./types";
 
-export async function addPet(input: NewPet) {
-  return db.pets.add({
-    ...input,
-    createdAt: Date.now(),
+function syncPet(pet: Pet) {
+  fetch("/api/pets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(pet),
+  })
+    .then(async (res) => {
+      if (res.ok) await db.pets.update(pet.id, { pendingSync: false });
+    })
+    .catch(() => {
+      /* request failed — pendingSync stays true, sync service will retry */
+    });
+}
+
+function syncPetUpdate(id: string, updates: object) {
+  fetch(`/api/pets/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  })
+    .then(async (res) => {
+      if (res.ok) await db.pets.update(id, { pendingSync: false });
+    })
+    .catch(() => {
+      /* request failed — pendingSync stays true, sync service will retry */
+    });
+}
+
+function syncPetDelete(id: string) {
+  fetch(`/api/pets/${id}`, { method: "DELETE" }).catch(() => {
+    /* request failed */
   });
 }
 
-export async function listPetsNewestFirst() {
-  return db.pets.orderBy("createdAt").reverse().toArray();
+export async function addPet(input: NewPet): Promise<Pet> {
+  const pet: Pet = {
+    id: crypto.randomUUID(),
+    ...input,
+    ownerPersonId: input.ownerPersonId ?? null,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    pendingSync: true,
+    pendingDelete: false,
+  };
+  await db.pets.add(pet);
+  syncPet(pet);
+  return pet;
 }
 
-export async function deletePet(id: number) {
-  return db.pets.delete(id);
+export async function listPetsNewestFirst(): Promise<Pet[]> {
+  return db.pets
+    .orderBy("createdAt")
+    .reverse()
+    .filter((p) => !p.pendingDelete)
+    .toArray();
 }
 
-export async function updatePet(id: number, input: Partial<NewPet>) {
-  return db.pets.update(id, input);
+export async function deletePet(id: string): Promise<void> {
+  if (navigator.onLine) {
+    await db.pets.delete(id);
+    syncPetDelete(id);
+  } else {
+    await db.pets.update(id, { pendingDelete: true, pendingSync: true });
+  }
+}
+
+export async function updatePet(
+  id: string,
+  input: Partial<NewPet>
+): Promise<void> {
+  const updatedAt = Date.now();
+  await db.pets.update(id, { ...input, updatedAt, pendingSync: true });
+  syncPetUpdate(id, { ...input, updatedAt });
 }

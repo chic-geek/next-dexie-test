@@ -55,7 +55,7 @@ export function useUpdatePersonMutation() {
       id,
       updates,
     }: {
-      id: number;
+      id: string;
       updates: Partial<NewPerson>;
       fullname?: string;
     }) => updatePerson(id, updates),

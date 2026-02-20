@@ -45,7 +45,7 @@ export function useUpdatePetMutation() {
       id,
       updates,
     }: {
-      id: number;
+      id: string;
       updates: Partial<NewPet>;
       name?: string;
     }) => updatePet(id, updates),

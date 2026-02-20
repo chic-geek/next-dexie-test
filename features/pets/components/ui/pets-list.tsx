@@ -14,9 +14,9 @@ export function PetsList() {
   const deletePet = useDeletePetMutation();
 
   const ownerNameById = React.useMemo(() => {
-    const m = new Map<number, string>();
+    const m = new Map<string, string>();
     for (const p of people.data ?? []) {
-      if (p.id != null) m.set(p.id, `${p.firstName} ${p.lastName}`);
+      m.set(p.id, `${p.firstName} ${p.lastName}`);
     }
     return m;
   }, [people.data]);
@@ -71,7 +71,7 @@ export function PetsList() {
                       variant="ghost"
                       size="icon"
                       aria-label={`Delete ${p.name}`}
-                      onConfirm={() => deletePet.mutate(p.id!)}
+                      onConfirm={() => deletePet.mutate(p.id)}
                     >
                       <TrashIcon size="16" color="red" />
                     </AlertButton>

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { usePetsQuery, useUpdatePetMutation } from "../../services";
 import { PetsForm } from "./pets-form";
 
-export function PetsEditForm({ petId }: { petId: number }) {
+export function PetsEditForm({ petId }: { petId: string }) {
   const router = useRouter();
   const pets = usePetsQuery();
   const updatePet = useUpdatePetMutation();

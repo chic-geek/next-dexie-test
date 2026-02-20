@@ -111,9 +111,9 @@ export function PetsForm({
             <FormItem>
               <FormLabel>Owner (optional)</FormLabel>
               <Select
-                value={String(field.value ?? "")}
+                value={field.value ?? ""}
                 onValueChange={(v) => {
-                  field.onChange(v === "" ? undefined : Number(v));
+                  field.onChange(v === "" ? null : v);
                 }}
                 disabled={people.isLoading || people.isError}
               >
@@ -124,7 +124,7 @@ export function PetsForm({
                 </FormControl>
                 <SelectContent>
                   {people.data?.map((option) => (
-                    <SelectItem key={option.id} value={String(option.id)}>
+                    <SelectItem key={option.id} value={option.id}>
                       {option.firstName} {option.lastName}
                     </SelectItem>
                   ))}

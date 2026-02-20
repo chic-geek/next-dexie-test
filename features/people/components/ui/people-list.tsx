@@ -47,7 +47,7 @@ export function PeopleList() {
                 variant="ghost"
                 size="icon"
                 aria-label="Delete person"
-                onConfirm={() => deletePerson.mutate(p.id!)}
+                onConfirm={() => deletePerson.mutate(p.id)}
               >
                 <TrashIcon size="16" color="red" />
               </AlertButton>

@@ -23,7 +23,7 @@ export default async function EditPersonPage({ params }: EditPersonPageProps) {
         </Link>
       </header>
 
-      <PeopleEditForm personId={Number(id)} />
+      <PeopleEditForm personId={id} />
     </main>
   );
 }
