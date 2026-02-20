@@ -29,11 +29,6 @@ function syncPersonUpdate(id: string, updates: object) {
     });
 }
 
-function syncPersonDelete(id: string) {
-  fetch(`/api/people/${id}`, { method: "DELETE" }).catch(() => {
-    /* request failed */
-  });
-}
 
 export async function addPerson(input: NewPerson, userId: string): Promise<Person> {
   const person: Person = {
@@ -59,11 +54,14 @@ export async function listPeopleNewestFirst(userId: string): Promise<Person[]> {
 }
 
 export async function deletePerson(id: string): Promise<void> {
+  await db.people.update(id, { pendingDelete: true, pendingSync: true });
+
   if (navigator.onLine) {
-    await db.people.delete(id);
-    syncPersonDelete(id);
-  } else {
-    await db.people.update(id, { pendingDelete: true, pendingSync: true });
+    const res = await fetch(`/api/people/${id}`, { method: "DELETE" }).catch(() => null);
+    if (res && (res.ok || res.status === 404)) {
+      await db.people.delete(id);
+    }
+    // if request failed, pendingDelete: true stays — sync service will retry on reconnect
   }
 }
 

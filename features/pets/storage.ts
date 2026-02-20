@@ -29,11 +29,6 @@ function syncPetUpdate(id: string, updates: object) {
     });
 }
 
-function syncPetDelete(id: string) {
-  fetch(`/api/pets/${id}`, { method: "DELETE" }).catch(() => {
-    /* request failed */
-  });
-}
 
 export async function addPet(input: NewPet, userId: string): Promise<Pet> {
   const pet: Pet = {
@@ -60,11 +55,14 @@ export async function listPetsNewestFirst(userId: string): Promise<Pet[]> {
 }
 
 export async function deletePet(id: string): Promise<void> {
+  await db.pets.update(id, { pendingDelete: true, pendingSync: true });
+
   if (navigator.onLine) {
-    await db.pets.delete(id);
-    syncPetDelete(id);
-  } else {
-    await db.pets.update(id, { pendingDelete: true, pendingSync: true });
+    const res = await fetch(`/api/pets/${id}`, { method: "DELETE" }).catch(() => null);
+    if (res && (res.ok || res.status === 404)) {
+      await db.pets.delete(id);
+    }
+    // if request failed, pendingDelete: true stays — sync service will retry on reconnect
   }
 }
 
