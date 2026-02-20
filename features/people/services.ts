@@ -25,8 +25,9 @@ export function usePeopleQuery() {
 
 export function useAddPersonMutation() {
   const qc = useQueryClient();
+  const { data: session } = useSession();
   return useMutation({
-    mutationFn: addPerson,
+    mutationFn: (input: NewPerson) => addPerson(input, session!.user.id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: peopleKeys.all });
       toast.success("Person added successfully.");

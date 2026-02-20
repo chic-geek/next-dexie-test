@@ -19,9 +19,9 @@ export function usePetsQuery() {
 
 export function useAddPetMutation() {
   const qc = useQueryClient();
-
+  const { data: session } = useSession();
   return useMutation({
-    mutationFn: addPet,
+    mutationFn: (input: NewPet) => addPet(input, session!.user.id),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: petsKeys.all });
     },

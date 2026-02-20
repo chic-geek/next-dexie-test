@@ -35,10 +35,11 @@ function syncPetDelete(id: string) {
   });
 }
 
-export async function addPet(input: NewPet): Promise<Pet> {
+export async function addPet(input: NewPet, userId: string): Promise<Pet> {
   const pet: Pet = {
     id: crypto.randomUUID(),
     ...input,
+    userId,
     ownerPersonId: input.ownerPersonId ?? null,
     createdAt: Date.now(),
     updatedAt: Date.now(),

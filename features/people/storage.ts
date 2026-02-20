@@ -35,10 +35,11 @@ function syncPersonDelete(id: string) {
   });
 }
 
-export async function addPerson(input: NewPerson): Promise<Person> {
+export async function addPerson(input: NewPerson, userId: string): Promise<Person> {
   const person: Person = {
     id: crypto.randomUUID(),
     ...input,
+    userId,
     createdAt: Date.now(),
     updatedAt: Date.now(),
     pendingSync: true,
