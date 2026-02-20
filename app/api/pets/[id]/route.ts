@@ -32,8 +32,11 @@ export async function PUT(
         ownerPersonId: body.ownerPersonId ?? null,
         updatedAt: new Date(),
       },
+      setWhere: eq(schema.pets.userId, session.user.id),
     })
     .returning();
+
+  if (!upserted) return new Response("Conflict", { status: 409 });
 
   return Response.json(upserted);
 }

@@ -34,8 +34,11 @@ export async function PUT(
         age: body.age,
         updatedAt: new Date(),
       },
+      setWhere: eq(schema.people.userId, session.user.id),
     })
     .returning();
+
+  if (!upserted) return new Response("Conflict", { status: 409 });
 
   return Response.json(upserted);
 }
