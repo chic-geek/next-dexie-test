@@ -17,7 +17,7 @@ function UserNav() {
 
     const userId = session.user.id;
 
-    hydrateFromServer().catch(console.error);
+    hydrateFromServer(userId).catch(console.error);
 
     // Flush any writes that happened offline in a previous session
     syncPendingChanges(userId).catch(console.error);

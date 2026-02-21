@@ -52,9 +52,9 @@ function serverPetToDexie(p: ServerPet): Pet {
   };
 }
 
-const HYDRATION_KEY = "hydratedAt";
-
-export async function hydrateFromServer(): Promise<void> {
+export async function hydrateFromServer(userId: string): Promise<void> {
+  // Key by userId so switching accounts in the same tab triggers a fresh hydration
+  const HYDRATION_KEY = `hydratedAt:${userId}`;
   // Only hydrate once per browser session (sessionStorage is cleared on tab close)
   if (sessionStorage.getItem(HYDRATION_KEY)) return;
 
