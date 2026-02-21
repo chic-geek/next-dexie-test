@@ -1,23 +1,27 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSession } from "@/lib/auth-client";
 import { petsKeys } from "./query-keys";
 import { addPet, deletePet, listPetsNewestFirst, updatePet } from "./storage";
 import { toast } from "sonner";
 import { NewPet } from "./types";
 
 export function usePetsQuery() {
+  const { data: session } = useSession();
+  const userId = session?.user.id;
   return useQuery({
     queryKey: petsKeys.all,
-    queryFn: listPetsNewestFirst,
+    queryFn: () => listPetsNewestFirst(userId!),
+    enabled: !!userId,
   });
 }
 
 export function useAddPetMutation() {
   const qc = useQueryClient();
-
+  const { data: session } = useSession();
   return useMutation({
-    mutationFn: addPet,
+    mutationFn: (input: NewPet) => addPet(input, session!.user.id),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: petsKeys.all });
     },
@@ -45,7 +49,7 @@ export function useUpdatePetMutation() {
       id,
       updates,
     }: {
-      id: number;
+      id: string;
       updates: Partial<NewPet>;
       name?: string;
     }) => updatePet(id, updates),

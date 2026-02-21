@@ -3,6 +3,7 @@
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useSession } from "@/lib/auth-client";
 import { peopleKeys } from "./query-keys";
 import {
   addPerson,
@@ -13,16 +14,20 @@ import {
 import { NewPerson } from "./types";
 
 export function usePeopleQuery() {
+  const { data: session } = useSession();
+  const userId = session?.user.id;
   return useQuery({
     queryKey: peopleKeys.all,
-    queryFn: listPeopleNewestFirst,
+    queryFn: () => listPeopleNewestFirst(userId!),
+    enabled: !!userId,
   });
 }
 
 export function useAddPersonMutation() {
   const qc = useQueryClient();
+  const { data: session } = useSession();
   return useMutation({
-    mutationFn: addPerson,
+    mutationFn: (input: NewPerson) => addPerson(input, session!.user.id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: peopleKeys.all });
       toast.success("Person added successfully.");
@@ -55,7 +60,7 @@ export function useUpdatePersonMutation() {
       id,
       updates,
     }: {
-      id: number;
+      id: string;
       updates: Partial<NewPerson>;
       fullname?: string;
     }) => updatePerson(id, updates),

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { usePeopleQuery, useUpdatePersonMutation } from "../../services";
 import { PeopleForm } from "./people-form";
 
-export function PeopleEditForm({ personId }: { personId: number }) {
+export function PeopleEditForm({ personId }: { personId: string }) {
   const router = useRouter();
   const people = usePeopleQuery();
   const updatePerson = useUpdatePersonMutation();
