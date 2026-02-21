@@ -1,44 +1,45 @@
 # Dexie.js Usage Guide
 
-This document covers how Dexie.js (v4) is used in this project to provide client-side IndexedDB storage, integrated with TanStack Query for cache management.
+This document covers how Dexie.js (v4) is used in this project as the offline-first local store, integrated with TanStack Query for cache management.
 
-## Architecture Overview
+---
+
+## Role of Dexie in this architecture
+
+Dexie is the **primary data store during a session**. All reads come from Dexie, all writes go to Dexie first. Postgres is the durable backup — not the read source.
+
+This means the app works fully offline for reads and writes. See [`docs/offline-sync.md`](./offline-sync.md) for the full sync pattern.
+
+---
+
+## File Structure
 
 ```
-db/                          # Database definition and schema
-  index.ts                   # DB class + singleton export
+db/dexie/
+  index.ts          ← AppDB class + singleton export
   schema/
-    index.ts                 # Schema versioning orchestrator
-    schema-v1.ts             # v1: people table
-    schema-v2.ts             # v2: added pets table
-
-features/<feature>/          # Per-feature data layer
-  types.ts                   # Type definitions
-  storage.ts                 # Raw Dexie queries (reads + writes)
-  services.ts                # TanStack Query hooks (useQuery / useMutation)
-  query-keys.ts              # Query key constants
-  components/ui/             # React components
+    index.ts        ← applies schema versions to the Dexie instance
+    schema-v3.ts    ← current schema (UUID PKs, userId, sync fields)
 ```
 
-The key principle is **separation of concerns** within each feature:
+The database is imported from `@/db/dexie` throughout the codebase.
 
-- `storage.ts` contains all direct Dexie calls (pure async functions, no React)
-- `services.ts` wraps those with TanStack Query hooks for use in components
-- Components never import from `db/` directly; they go through `services.ts`
+---
 
-Dexie is client-side only (IndexedDB). There is no server-side database. All pages that use Dexie are `"use client"` components.
+## Database Class (`db/dexie/index.ts`)
 
-## Database Definition
+```typescript
+import { Dexie, type Table } from "dexie";
+import { schema } from "./schema";
+import { Person } from "@/features/people/types";
+import { Pet } from "@/features/pets/types";
 
-`db/index.ts` defines the database class:
-
-```ts
 class AppDB extends Dexie {
-  people!: Table<Person, number>;
-  pets!: Table<Pet, number>;
+  people!: Table<Person, string>;  // string = primary key type (UUID)
+  pets!: Table<Pet, string>;
 
   constructor() {
-    super("AppDB");   // IndexedDB database name
+    super("AppDB_2");  // see note below on the name
     schema(this);
   }
 }
@@ -46,238 +47,242 @@ class AppDB extends Dexie {
 export const db = new AppDB();
 ```
 
-- `Table<Person, number>` means the table stores `Person` records with `number` primary keys.
-- The `db` singleton is imported wherever Dexie access is needed.
+**Why `"AppDB_2"`?** Dexie cannot change a table's primary key type via a migration. The original database (`"AppDB"`) used auto-increment integer IDs. When the schema changed to UUID string IDs, renaming the database to `"AppDB_2"` was the only safe option — it creates a fresh IndexedDB instance with the correct schema. Data is recovered from Postgres on the next login via hydration.
 
-## Schema and Versioning
+---
 
-Schema versions are defined in `db/schema/` and applied in `db/schema/index.ts`:
+## Schema (`db/dexie/schema/schema-v3.ts`)
 
-```ts
+```typescript
+export const schemaV3 = {
+  people: "id, userId, createdAt, pendingSync",
+  pets:   "id, userId, createdAt, ownerPersonId, pendingSync",
+} as const;
+```
+
+The first field in the string is the primary key. Subsequent fields are indexes — only indexed fields can be used in `.orderBy()` or `.where()`. Non-indexed fields (e.g. `firstName`, `pendingDelete`) are stored but can only be filtered with `.filter()`.
+
+### Schema version management (`db/dexie/schema/index.ts`)
+
+```typescript
+import type { Dexie } from "dexie";
+import { schemaV3 } from "./schema-v3";
+
 export function schema(db: Dexie) {
-  db.version(1).stores(schemaV1);
-  db.version(2).stores(schemaV2);
+  db.version(1).stores(schemaV3);
 }
 ```
 
-Each version file exports a store definition object:
+Because `"AppDB_2"` started fresh, it only has version 1. Future schema changes increment this version number.
 
-```ts
-// schema-v1.ts
-export const schemaV1 = {
-  people: "++id, createdAt",
-} as const;
+### Adding a new schema version
 
-// schema-v2.ts
-export const schemaV2 = {
-  people: "++id, createdAt",
-  pets: "++id, createdAt, ownerPersonId",
-} as const;
-```
-
-### Index syntax
-
-| Syntax  | Meaning                           |
-|---------|-----------------------------------|
-| `++id`  | Auto-increment primary key        |
-| `field` | Indexed field (enables queries)   |
-
-Only indexed fields can be used in `.orderBy()`, `.where()`, etc. Non-indexed fields are still stored, they just can't be queried efficiently.
-
-### Adding a new version
-
-1. Create `db/schema/schema-v3.ts` with the full store definitions (all tables, not just changes).
-2. Add `db.version(3).stores(schemaV3)` in `db/schema/index.ts`.
-3. If you need data migration, chain `.upgrade(tx => { ... })` after `.stores()`.
-4. Update the table declarations in `db/index.ts` if new tables were added.
+1. Create `db/dexie/schema/schema-v4.ts` with the **full** store definitions (all tables, not just changed ones).
+2. Add `db.version(2).stores(schemaV4)` in `db/dexie/schema/index.ts`.
+3. Add the new table declaration to `db/dexie/index.ts` if you added a table.
+4. Chain `.upgrade(tx => { ... })` if you need to migrate existing data.
 
 Dexie handles the upgrade automatically when the browser opens the database and finds a newer version.
 
-## Types
+---
 
-Each feature defines its own types:
+## Entity Types
 
-```ts
+Every entity follows the same shape — a client-generated UUID primary key, a `userId` for tenant scoping, timestamps, and two sync flags:
+
+```typescript
 // features/people/types.ts
 export type Person = {
-  id?: number;         // optional because auto-generated
+  id: string;              // UUID — crypto.randomUUID(), generated before any write
+  userId?: string;         // better-auth user ID — set at creation time
   firstName: string;
   lastName: string;
   age: number;
-  createdAt: number;   // Date.now() timestamp
+  createdAt: number;       // Unix ms — Date.now()
+  updatedAt: number;       // Unix ms — updated on every write
+  pendingSync: boolean;    // true = not yet confirmed by server
+  pendingDelete: boolean;  // true = soft-deleted, awaiting server confirmation
 };
 
-export type NewPerson = Omit<Person, "id" | "createdAt">;
+export type NewPerson = Omit<
+  Person,
+  "id" | "userId" | "createdAt" | "updatedAt" | "pendingSync" | "pendingDelete"
+>;
 ```
 
-```ts
-// features/pets/types.ts
-export type PetSpecies = "dog" | "cat" | "other";
+The `New*` type strips all system-generated fields. It is used as the form input type.
 
-export type Pet = {
-  id?: number;
-  name: string;
-  species: PetSpecies;
-  ownerPersonId?: number;   // references Person.id (not enforced by DB)
-  createdAt: number;
-};
-
-export type NewPet = Omit<Pet, "id" | "createdAt">;
-```
-
-The `New*` types strip `id` and `createdAt` since those are generated on insert.
+---
 
 ## Querying Data
 
-Queries live in `storage.ts` as plain async functions:
+Reads live in `storage.ts` as plain async functions. All list queries are scoped to the signed-in user and filter out soft-deleted records:
 
-```ts
+```typescript
 // features/people/storage.ts
-export async function listPeopleNewestFirst() {
-  return db.people.orderBy("createdAt").reverse().toArray();
+export async function listPeopleNewestFirst(userId: string): Promise<Person[]> {
+  return db.people
+    .orderBy("createdAt")
+    .reverse()
+    .filter((p) => p.userId === userId && !p.pendingDelete)
+    .toArray();
 }
 ```
 
-Common Dexie query methods:
+**Important:** `pendingDelete` is not indexed, so it must use `.filter()` rather than `.where()`. Dexie's `.filter()` is a JS-level filter applied after the index scan — it works correctly but cannot use an index.
 
-| Method                          | Description                          |
-|---------------------------------|--------------------------------------|
-| `table.toArray()`               | Get all records                      |
-| `table.get(id)`                 | Get one record by primary key        |
-| `table.orderBy("field")`        | Sort by indexed field (ascending)    |
-| `.reverse()`                    | Reverse sort order (descending)      |
-| `table.where("field").equals(v)`| Filter by indexed field              |
-| `.toArray()`                    | Execute and return results as array  |
+### Common Dexie query methods
+
+| Method | Description |
+|---|---|
+| `table.toArray()` | All records |
+| `table.get(id)` | Single record by primary key |
+| `table.orderBy("field")` | Sort by indexed field (ascending) |
+| `.reverse()` | Reverse sort order |
+| `table.where("field").equals(v)` | Filter by indexed field |
+| `.filter(fn)` | JS-level filter (use for non-indexed fields) |
+| `.toArray()` | Execute and return results |
+
+---
 
 ## Writing Data
 
-Mutations also live in `storage.ts`:
+### Create
 
-```ts
-// features/people/storage.ts
-export async function addPerson(input: NewPerson) {
-  return db.people.add({
+Generate a UUID client-side and set all system fields before writing to Dexie. `userId` is set at creation time — never rely on hydration to fill it in later.
+
+```typescript
+export async function addPerson(input: NewPerson, userId: string): Promise<Person> {
+  const person: Person = {
+    id: crypto.randomUUID(),
     ...input,
+    userId,
     createdAt: Date.now(),
-  });
+    updatedAt: Date.now(),
+    pendingSync: true,    // will be cleared when server confirms
+    pendingDelete: false,
+  };
+  await db.people.add(person);
+  return person;
 }
 ```
 
-Common Dexie write methods:
+### Update
 
-| Method                  | Description                                    |
-|-------------------------|------------------------------------------------|
-| `table.add(obj)`        | Insert a new record (fails if key exists)      |
-| `table.put(obj)`        | Insert or replace (upsert)                     |
-| `table.update(id, obj)` | Partial update of an existing record           |
-| `table.delete(id)`      | Delete by primary key                          |
-| `table.bulkAdd(arr)`    | Insert multiple records                        |
-| `table.bulkPut(arr)`    | Upsert multiple records                        |
-| `table.bulkDelete(ids)` | Delete multiple records by key                 |
+Stamp `updatedAt` and set `pendingSync: true` on every update so the sync service picks it up if the server request fails:
+
+```typescript
+export async function updatePerson(id: string, updates: Partial<NewPerson>): Promise<void> {
+  await db.people.update(id, { ...updates, updatedAt: Date.now(), pendingSync: true });
+}
+```
+
+### Delete
+
+Always soft-delete first. Hard-delete only after the server confirms:
+
+```typescript
+export async function deletePerson(id: string): Promise<void> {
+  // Soft-delete first — preserves the record for the sync service if the
+  // server request fails.
+  await db.people.update(id, { pendingDelete: true, pendingSync: true });
+
+  if (navigator.onLine) {
+    const res = await fetch(`/api/people/${id}`, { method: "DELETE" }).catch(() => null);
+    if (res && (res.ok || res.status === 404)) {
+      await db.people.delete(id); // hard-delete only after server confirms
+    }
+  }
+}
+```
+
+### Common Dexie write methods
+
+| Method | Description |
+|---|---|
+| `table.add(obj)` | Insert (fails if key exists) |
+| `table.put(obj)` | Insert or replace (upsert) |
+| `table.update(id, partial)` | Partial update of an existing record |
+| `table.delete(id)` | Hard-delete by primary key |
+| `table.bulkAdd(arr)` | Insert multiple records |
+| `table.bulkPut(arr)` | Upsert multiple records |
+| `table.bulkDelete(ids)` | Delete multiple records by key |
+
+---
 
 ## TanStack Query Integration
 
-`services.ts` wraps storage functions with TanStack Query hooks:
+`services.ts` wraps storage functions with TanStack Query hooks. The session's `userId` is read here and threaded down into the storage functions.
 
-### Queries
+### Query
 
-```ts
+```typescript
 // features/people/services.ts
 export function usePeopleQuery() {
+  const { data: session } = useSession();
+  const userId = session?.user.id;
+
   return useQuery({
     queryKey: peopleKeys.all,
-    queryFn: listPeopleNewestFirst,
+    queryFn: () => listPeopleNewestFirst(userId!),
+    enabled: !!userId,  // don't run before session is available
   });
 }
 ```
 
-### Mutations
+### Mutation
 
-```ts
+```typescript
 export function useAddPersonMutation() {
   const qc = useQueryClient();
+  const { data: session } = useSession();
+
   return useMutation({
-    mutationFn: addPerson,
-    onSuccess: () => qc.invalidateQueries({ queryKey: peopleKeys.all }),
+    mutationFn: (input: NewPerson) => addPerson(input, session!.user.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: peopleKeys.all });
+      toast.success("Person added.");
+    },
   });
 }
 ```
 
-The pattern is:
-
-1. Define query keys in `query-keys.ts` (e.g. `{ all: ["people"] as const }`)
-2. Wrap reads with `useQuery`, pointing `queryFn` at the storage function
-3. Wrap writes with `useMutation`, invalidating relevant queries `onSuccess`
-
-This gives you caching, loading/error states, and automatic refetching after mutations.
+The pattern is always: write to Dexie → invalidate the query → TanStack Query re-runs the `queryFn` → reads fresh data from Dexie. The UI never directly depends on the server response.
 
 ### Query keys
 
-Query keys are kept in a dedicated file per feature:
-
-```ts
+```typescript
 // features/people/query-keys.ts
 export const peopleKeys = {
   all: ["people"] as const,
 };
 ```
 
-If you add filtered or parameterized queries, extend the keys object:
-
-```ts
-export const peopleKeys = {
-  all: ["people"] as const,
-  byId: (id: number) => ["people", id] as const,
-};
-```
-
-## Adding a New Feature
-
-To add a new feature (e.g. "toys"):
-
-1. **Schema** - Create `db/schema/schema-v3.ts` with the new table, add `db.version(3).stores(schemaV3)` to `db/schema/index.ts`, and add the table declaration to `db/index.ts`.
-
-2. **Types** - Create `features/toys/types.ts` with `Toy` and `NewToy` types.
-
-3. **Storage** - Create `features/toys/storage.ts` with Dexie query/mutation functions.
-
-4. **Query keys** - Create `features/toys/query-keys.ts`.
-
-5. **Services** - Create `features/toys/services.ts` with `useToysQuery()` and `useAddToyMutation()` hooks.
-
-6. **Components** - Create form and list components under `features/toys/components/ui/`.
-
-7. **Page** - Create `app/toys/page.tsx` to render the components.
-
-## Relationships
-
-Relationships between tables (e.g. `Pet.ownerPersonId -> Person.id`) are **not enforced** by Dexie/IndexedDB. They are convention-based. To resolve a relationship, query the related table manually:
-
-```ts
-// Get all pets for a person
-const pets = await db.pets.where("ownerPersonId").equals(personId).toArray();
-
-// Get the owner of a pet
-const owner = pet.ownerPersonId ? await db.people.get(pet.ownerPersonId) : undefined;
-```
+---
 
 ## Transactions
 
-For operations that need atomicity (multiple writes that must all succeed or all fail):
+For operations that must be atomic across multiple tables:
 
-```ts
+```typescript
 await db.transaction("rw", db.people, db.pets, async () => {
-  const personId = await db.people.add({ ... });
-  await db.pets.add({ ..., ownerPersonId: personId });
+  await db.people.add({ ... });
+  await db.pets.add({ ... });
 });
 ```
 
-The `"rw"` flag means read-write. List all tables involved after it.
+List all tables involved after the `"rw"` flag. If any operation inside throws, Dexie rolls back all changes.
 
-## Key Dependencies
+---
 
-| Package               | Role                                      |
-|-----------------------|-------------------------------------------|
-| `dexie` ^4.3.0       | IndexedDB wrapper                         |
-| `@tanstack/react-query` ^5.90.20 | Cache management + React hooks |
-| `react-hook-form` ^7.71.1 | Form state management               |
+## Relationships
+
+Relationships (e.g. `Pet.ownerPersonId → Person.id`) are not enforced by IndexedDB. They are convention-based. Query the related table manually:
+
+```typescript
+// All pets for a person
+const pets = await db.pets.where("ownerPersonId").equals(personId).toArray();
+
+// Owner of a pet
+const owner = pet.ownerPersonId ? await db.people.get(pet.ownerPersonId) : null;
+```

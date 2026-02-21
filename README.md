@@ -1,36 +1,117 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Offline-First Next.js Blueprint
 
-## Getting Started
+A reference implementation for building offline-first Next.js applications backed by Postgres. Designed to be copied as the starting point for apps where offline use is a hard requirement — e.g. a workout tracker used in a gym without connectivity.
 
-First, run the development server:
+## What this project demonstrates
+
+- **Offline-first reads and writes** — Dexie (IndexedDB) is the primary data store. The user never waits for a network round-trip.
+- **Write-through sync** — writes go to Dexie immediately, then to Postgres in the background.
+- **Offline write queue** — failed server writes are retried automatically when connectivity returns (`pendingSync` flag).
+- **Soft deletes** — offline deletes are queued and replayed; the record is hidden from the UI but kept in Dexie until the server confirms.
+- **On-login hydration** — when a user logs in on any device, their server data is pulled into Dexie so reads work immediately.
+- **Multi-account safety** — all Dexie queries are scoped by `userId`; hydration and sync are keyed per user.
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | Next.js 16 (App Router) |
+| Local store | Dexie.js v4 (IndexedDB) |
+| Server database | Neon Postgres (serverless HTTP driver) |
+| ORM | Drizzle ORM |
+| Auth | better-auth (email/password) |
+| Data fetching | TanStack Query v5 |
+| Forms | react-hook-form + Zod |
+| UI | shadcn/ui + Tailwind CSS v4 |
+
+## Prerequisites
+
+- Node.js 18+
+- A [Neon](https://neon.tech) Postgres database (free tier is sufficient)
+
+## Setup
+
+**1. Install dependencies**
+
+```bash
+npm install
+```
+
+**2. Create `.env.local`**
+
+```bash
+# Neon connection string — from your Neon project dashboard
+DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
+
+# Random secret — generate with: openssl rand -base64 32
+BETTER_AUTH_SECRET=your-secret-here
+
+# Public URL of the app (used by better-auth for CSRF and callbacks)
+BETTER_AUTH_URL=http://localhost:3000
+```
+
+**3. Run migrations**
+
+```bash
+npx drizzle-kit migrate
+```
+
+This applies the committed SQL migration files in `db/neon/migrations/` to your Neon database.
+
+**4. Start the dev server**
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). You'll be redirected to sign up on first visit.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Documentation
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Doc | What it covers |
+|---|---|
+| [`docs/architecture.md`](docs/architecture.md) | System overview, data flow, project structure, critical config |
+| [`docs/offline-sync.md`](docs/offline-sync.md) | Write-through pattern, sync service, hydration, replication checklist |
+| [`docs/auth.md`](docs/auth.md) | better-auth setup, route protection, session handling |
+| [`docs/database.md`](docs/database.md) | Drizzle schema, migration workflow, query patterns |
+| [`docs/dexie.md`](docs/dexie.md) | Dexie database class, schema versioning, query/write API |
+| [`docs/adding-an-entity.md`](docs/adding-an-entity.md) | Step-by-step guide to adding a new entity to the sync architecture |
 
-## Learn More
+## Project structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+app/
+  api/
+    auth/[...all]/    ← better-auth catch-all
+    people/           ← GET, POST
+    people/[id]/      ← PATCH, PUT (upsert), DELETE
+    pets/
+    pets/[id]/
+  sign-in/
+  sign-up/
+  _components/
+    providers.tsx     ← QueryClient, hydration, sync wiring
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+db/
+  dexie/              ← IndexedDB (client-side)
+    index.ts          ← AppDB_2 class + singleton
+    schema/           ← versioned schema definitions
+  neon/               ← Postgres (server-side)
+    index.ts          ← Drizzle singleton
+    schema.ts         ← app tables
+    auth-schema.ts    ← better-auth tables
+    migrations/       ← committed SQL files
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+features/
+  people/             ← types, storage, services, query-keys, components
+  pets/
 
-## Deploy on Vercel
+lib/
+  auth.ts             ← betterAuth() server instance
+  auth-client.ts      ← createAuthClient() for client components
+  hydrate.ts          ← on-login: pull server data into Dexie
+  sync.ts             ← flush pendingSync records to server
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+proxy.ts              ← route protection (Next.js 16)
+drizzle.config.ts
+```
