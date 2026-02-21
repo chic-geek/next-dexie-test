@@ -3,10 +3,10 @@ import { db } from "@/db/dexie";
 // Flushes all Dexie records that have pendingSync: true to the server.
 // Called on mount and whenever the browser comes back online.
 // Uses Promise.allSettled so one failure doesn't block the rest.
-export async function syncPendingChanges(): Promise<void> {
+export async function syncPendingChanges(userId: string): Promise<void> {
   const [pendingPeople, pendingPets] = await Promise.all([
-    db.people.filter((p) => p.pendingSync).toArray(),
-    db.pets.filter((p) => p.pendingSync).toArray(),
+    db.people.filter((p) => p.userId === userId && p.pendingSync).toArray(),
+    db.pets.filter((p) => p.userId === userId && p.pendingSync).toArray(),
   ]);
 
   await Promise.allSettled(

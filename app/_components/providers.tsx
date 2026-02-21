@@ -15,17 +15,19 @@ function UserNav() {
   React.useEffect(() => {
     if (!session?.user) return;
 
+    const userId = session.user.id;
+
     hydrateFromServer().catch(console.error);
 
     // Flush any writes that happened offline in a previous session
-    syncPendingChanges().catch(console.error);
+    syncPendingChanges(userId).catch(console.error);
 
     // Keep flushing whenever connectivity is restored
     window.addEventListener("online", handleOnline);
     return () => window.removeEventListener("online", handleOnline);
 
     function handleOnline() {
-      syncPendingChanges().catch(console.error);
+      syncPendingChanges(userId).catch(console.error);
     }
   }, [session?.user?.id]);
 
