@@ -118,7 +118,7 @@ Every entity has a consistent set of fields:
 ```typescript
 type Person = {
   id: string;              // UUID — generated client-side with crypto.randomUUID()
-  userId?: string;         // better-auth user ID — set after login/hydration
+  userId?: string;         // better-auth user ID — set at creation time (optional in type for Omit compatibility)
   firstName: string;
   lastName: string;
   age: number;

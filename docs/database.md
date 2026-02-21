@@ -178,13 +178,21 @@ const [updated] = await db
 ### Upsert (used by sync service)
 
 ```typescript
-await db
+const [upserted] = await db
   .insert(schema.people)
   .values({ id, userId: session.user.id, ...body })
   .onConflictDoUpdate({
     target: schema.people.id,
     set: { ...body, updatedAt: new Date() },
-  });
+    // Ownership guard: only update the conflicting row if it belongs to this user.
+    // Without this, a conflicting UUID owned by another user would be silently overwritten.
+    setWhere: eq(schema.people.userId, session.user.id),
+  })
+  .returning();
+
+// If setWhere blocked the update, upserted is undefined. Return 409 so the
+// sync service keeps pendingSync: true instead of treating it as a success.
+if (!upserted) return new Response("Conflict", { status: 409 });
 ```
 
 ### Delete (scoped to user)

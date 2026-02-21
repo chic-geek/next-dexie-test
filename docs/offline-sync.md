@@ -61,10 +61,11 @@ type Person = {
 6. On server failure: `pendingSync` stays `true` — Phase 2 sync service picks it up
 
 ```typescript
-export async function addPerson(input: NewPerson): Promise<Person> {
+export async function addPerson(input: NewPerson, userId: string): Promise<Person> {
   const person: Person = {
     id: crypto.randomUUID(),
     ...input,
+    userId,                // always set at creation — never rely on hydration to fill this in
     createdAt: Date.now(),
     updatedAt: Date.now(),
     pendingSync: true,
@@ -80,33 +81,37 @@ export async function addPerson(input: NewPerson): Promise<Person> {
 
 Identical flow — the fire-and-forget `fetch` simply fails and `.catch()` suppresses the error. `pendingSync` stays `true`. The sync service handles it when connectivity returns.
 
-### Delete (online)
+### Delete
 
-Hard-delete from Dexie immediately, fire DELETE request to server in the background.
-
-### Delete (offline)
-
-Soft-delete: set `pendingDelete: true, pendingSync: true` in Dexie. The record disappears from the UI immediately (list queries filter `!pendingDelete`), but stays in Dexie so the sync service can tell the server about it later.
+Soft-delete in Dexie **first**, then attempt the server request. The record disappears from the UI immediately (list queries filter `!pendingDelete`), but stays in Dexie until the server confirms the deletion.
 
 ```typescript
 export async function deletePerson(id: string): Promise<void> {
+  // Always mark as soft-deleted first — this preserves the retry path if the
+  // server request fails. The sync service will hard-delete from Dexie once
+  // the server confirms.
+  await db.people.update(id, { pendingDelete: true, pendingSync: true });
+
   if (navigator.onLine) {
-    await db.people.delete(id);
-    syncPersonDelete(id);
-  } else {
-    await db.people.update(id, { pendingDelete: true, pendingSync: true });
+    const res = await fetch(`/api/people/${id}`, { method: "DELETE" }).catch(() => null);
+    if (res && (res.ok || res.status === 404)) {
+      await db.people.delete(id); // hard-delete only after server confirms
+    }
+    // If the request failed, pendingDelete: true stays — sync service retries on reconnect
   }
 }
 ```
 
-List queries filter out soft-deleted records:
+**Why soft-delete first (not hard-delete then restore on failure)?** If you hard-delete from Dexie immediately and the server request fails, you've lost the local copy and can no longer retry. Soft-deleting first means the record is always available for the sync service to pick up and re-attempt.
+
+List queries are scoped to the signed-in user and filter out soft-deleted records:
 
 ```typescript
-export async function listPeopleNewestFirst(): Promise<Person[]> {
+export async function listPeopleNewestFirst(userId: string): Promise<Person[]> {
   return db.people
     .orderBy("createdAt")
     .reverse()
-    .filter((p) => !p.pendingDelete)
+    .filter((p) => p.userId === userId && !p.pendingDelete)
     .toArray();
 }
 ```
@@ -120,8 +125,12 @@ The sync service runs on:
 - **`window` online event** — flushes immediately when connectivity returns
 
 ```typescript
-export async function syncPendingChanges(): Promise<void> {
-  const pendingPeople = await db.people.filter((p) => p.pendingSync).toArray();
+export async function syncPendingChanges(userId: string): Promise<void> {
+  // Scope to the signed-in user — avoids flushing another account's data
+  // if Dexie contains records from a previous session on a shared device.
+  const pendingPeople = await db.people
+    .filter((p) => p.userId === userId && p.pendingSync)
+    .toArray();
 
   await Promise.allSettled(
     pendingPeople.map(async (person) => {
@@ -158,9 +167,12 @@ Key design decisions:
 When a user logs in, their server data is pulled into Dexie so reads work immediately on any device.
 
 ```typescript
-export async function hydrateFromServer(): Promise<void> {
-  // Only run once per tab — sessionStorage (not the auth session) is cleared on tab close
-  if (sessionStorage.getItem("hydratedAt")) return;
+export async function hydrateFromServer(userId: string): Promise<void> {
+  // Key the sessionStorage entry by userId so switching accounts in the same
+  // tab triggers a fresh hydration rather than serving the previous user's data.
+  const HYDRATION_KEY = `hydratedAt:${userId}`;
+  // Only run once per tab — sessionStorage is cleared on tab close
+  if (sessionStorage.getItem(HYDRATION_KEY)) return;
 
   const [peopleRes, petsRes] = await Promise.all([
     fetch("/api/people"),
@@ -183,7 +195,7 @@ export async function hydrateFromServer(): Promise<void> {
       .map(serverPersonToDexie)
   );
 
-  sessionStorage.setItem("hydratedAt", Date.now().toString());
+  sessionStorage.setItem(HYDRATION_KEY, Date.now().toString());
 }
 ```
 
@@ -215,18 +227,29 @@ export async function GET() {
 }
 ```
 
-The sync service uses a `PUT` upsert endpoint:
+The sync service uses a `PUT` upsert endpoint with an ownership guard:
 
 ```typescript
 // app/api/people/[id]/route.ts
 export async function PUT(req, { params }) {
   // ...session check...
-  await db.insert(schema.people)
+  const [upserted] = await db
+    .insert(schema.people)
     .values({ id, userId: session.user.id, ...body })
     .onConflictDoUpdate({
       target: schema.people.id,
       set: { ...body, updatedAt: new Date() },
-    });
+      // setWhere ensures the conflict row belongs to this user.
+      // If the ID belongs to another user, the update is a no-op and upserted is undefined.
+      setWhere: eq(schema.people.userId, session.user.id),
+    })
+    .returning();
+
+  // Return 409 so the sync service leaves pendingSync: true rather than
+  // silently clearing it on a record it doesn't own.
+  if (!upserted) return new Response("Conflict", { status: 409 });
+
+  return Response.json(upserted);
 }
 ```
 
@@ -272,11 +295,13 @@ This means:
 React.useEffect(() => {
   if (!session?.user) return;
 
-  hydrateFromServer().catch(console.error);
-  syncPendingChanges().catch(console.error);
+  const userId = session.user.id;
+
+  hydrateFromServer(userId).catch(console.error);
+  syncPendingChanges(userId).catch(console.error);
 
   function handleOnline() {
-    syncPendingChanges().catch(console.error);
+    syncPendingChanges(userId).catch(console.error);
   }
   window.addEventListener("online", handleOnline);
   return () => window.removeEventListener("online", handleOnline);
@@ -293,12 +318,17 @@ When adding this pattern to a new app:
 - [ ] Use `crypto.randomUUID()` for all IDs (client-generated)
 - [ ] Add `updatedAt: number` to every entity type
 - [ ] Dexie schema indexes `pendingSync` field
+- [ ] `storage.ts` sets `userId` on every record **at creation time** (not just after hydration)
 - [ ] `storage.ts` writes to Dexie first, then fires server request
-- [ ] List queries filter `!pendingDelete`
-- [ ] `deleteFoo` soft-deletes when offline, hard-deletes when online
+- [ ] List queries are scoped by `userId` and filter `!pendingDelete`
+- [ ] `deleteFoo` soft-deletes in Dexie **first**, then attempts server request; only hard-deletes from Dexie after server confirms (preserves retry path)
 - [ ] API routes have `PUT` upsert endpoints (for sync service)
-- [ ] `lib/sync.ts` covers all entity tables
+- [ ] `PUT` upsert uses `setWhere: eq(table.userId, session.user.id)` to prevent cross-tenant overwrites
+- [ ] `PUT` upsert returns 409 when `setWhere` prevents the update (so `pendingSync` stays `true`)
+- [ ] `lib/sync.ts` takes `userId` and filters Dexie records by that userId before flushing
+- [ ] `lib/hydrate.ts` takes `userId` and keys the `sessionStorage` guard by userId (e.g. `hydratedAt:${userId}`)
 - [ ] `lib/hydrate.ts` maps server (camelCase, ISO timestamps) → Dexie (camelCase, Unix ms)
 - [ ] `QueryClient` has `networkMode: "always"` for both queries and mutations
+- [ ] `providers.tsx` passes `userId` to both `syncPendingChanges` and `hydrateFromServer`
 - [ ] `providers.tsx` calls `syncPendingChanges` on mount and on `online` event
 - [ ] `providers.tsx` calls `hydrateFromServer` when session is established
