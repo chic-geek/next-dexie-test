@@ -179,3 +179,4 @@ When mapping server responses into Dexie, property names are already camelCase (
 - [`docs/database.md`](./database.md) — Drizzle schema, migration workflow, query patterns
 - [`docs/dexie.md`](./dexie.md) — Dexie database class, schema versioning, query/write API
 - [`docs/adding-an-entity.md`](./adding-an-entity.md) — step-by-step guide to adding a new entity to the sync architecture
+- [`docs/decisions/`](./decisions/) — architecture decision records (ADRs)

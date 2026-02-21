@@ -76,6 +76,7 @@ Open [http://localhost:3000](http://localhost:3000). You'll be redirected to sig
 | [`docs/database.md`](docs/database.md) | Drizzle schema, migration workflow, query patterns |
 | [`docs/dexie.md`](docs/dexie.md) | Dexie database class, schema versioning, query/write API |
 | [`docs/adding-an-entity.md`](docs/adding-an-entity.md) | Step-by-step guide to adding a new entity to the sync architecture |
+| [`docs/decisions/`](docs/decisions/) | Architecture decision records (ADRs) |
 
 ## Project structure
 
